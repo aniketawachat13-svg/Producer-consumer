@@ -1,0 +1,119 @@
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><title>Producer–Consumer Simulator</title>
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<style>
+:root{--bg:#f4f6fb;--c:#fff;--t:#1c2333;--m:#667;--b:#dde2ee;--ac:#3b6cf6;--ok:#16a34a;--no:#dc2626;--wa:#d97706;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+@media(prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#0f1420;--c:#1a2132;--t:#e8ecf5;--m:#95a0b8;--b:#2c364d}}
+:root[data-theme="dark"]{--bg:#0f1420;--c:#1a2132;--t:#e8ecf5;--m:#95a0b8;--b:#2c364d}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--t);font:15px system-ui,sans-serif;padding:16px}
+.w{max-width:1050px;margin:auto}h1{margin:0;font-size:26px;text-align:center}.sub{text-align:center;color:var(--m);margin:4px 0 16px}
+.card{background:var(--c);border:1px solid var(--b);border-radius:12px;padding:14px}h2{font-size:14px;margin:0 0 10px;text-transform:uppercase;letter-spacing:.05em;color:var(--m)}
+#stage{position:relative;display:grid;grid-template-columns:1fr 1.6fr 1fr;gap:12px;margin-bottom:12px}
+.ctr{text-align:center}.big{font-size:44px}.st{display:inline-block;padding:3px 12px;border-radius:99px;font-weight:600;font-size:13px;margin:6px 0 10px;color:#fff}
+.Ready{background:var(--ok)}.Waiting{background:var(--no)}.Producing,.Consuming{background:var(--wa)}
+.slots{display:flex;gap:8px;flex-wrap:wrap;justify-content:center}.slot{width:84px;height:70px;border:2px dashed var(--b);border-radius:10px;display:flex;flex-direction:column;align-items:center;justify-content:center;font-size:12px;color:var(--m);transition:.3s}
+.slot.on{border:2px solid var(--ac);background:rgba(59,108,246,.12);color:var(--t);font-weight:600}.slot .e{font-size:26px}
+button{font:inherit;padding:8px 14px;border:1px solid var(--b);background:var(--ac);color:#fff;border-radius:8px;cursor:pointer;margin:3px}
+button.g{background:var(--c);color:var(--t)}button:disabled{opacity:.45;cursor:not-allowed}.why{display:block;font-size:12px;color:var(--no);min-height:16px}
+.row{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:12px}.sem{text-align:center}.sem .v{font-size:38px;font-weight:700;font-family:monospace}.sem small{color:var(--m)}
+.msg{padding:10px;border-radius:8px;background:rgba(59,108,246,.1);margin-bottom:12px;min-height:40px}
+.two{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px}#log{height:250px;overflow:auto;font:12px monospace}#log div{padding:1px 0;border-bottom:1px solid var(--b)}
+.fly{position:absolute;font-size:28px;transition:left .7s ease,top .7s ease;z-index:9;pointer-events:none}
+label{font-size:13px;display:block;margin:6px 0}input[type=range]{vertical-align:middle}
+.stat{display:flex;justify-content:space-between;padding:3px 0}code{background:var(--bg);padding:2px 6px;border-radius:4px}
+@media(max-width:720px){#stage,.row,.two{grid-template-columns:1fr}}
+</style></head><body><div class="w">
+<h1>Producer–Consumer Problem Simulator</h1><div class="sub">Car Factory → Parking Buffer → Customer</div>
+<div id="stage">
+ <div class="card ctr" id="fac"><h2>🏭 Car Factory</h2><div class="big">🏭</div><b>Producer</b><br><span class="st" id="ps"></span><br>
+  <button id="bp">Produce Car</button><button class="g" id="ba">Auto Produce</button><span class="why" id="pw"></span></div>
+ <div class="card ctr"><h2>🅿️ Parking Area (Shared Buffer)</h2><div class="slots" id="slots"></div>
+  <div style="margin-top:10px">Capacity: <input id="cap" type="number" min="1" max="10" value="3" style="width:56px;padding:4px"></div>
+  <div style="margin-top:8px" id="mx"></div></div>
+ <div class="card ctr" id="cus"><h2>👤 Customer / Dealer</h2><div class="big">👤</div><b>Consumer</b><br><span class="st" id="cs"></span><br>
+  <button id="bc">Consume Car</button><button class="g" id="bd">Auto Consume</button><span class="why" id="cw"></span></div>
+</div>
+<div class="msg" id="msg"></div>
+<div class="card" style="margin-bottom:12px"><h2>Controls</h2>
+ <button id="start">▶ Start Simulation</button><button class="g" id="pause">⏸ Pause</button><button class="g" id="reset">↻ Reset</button>
+ <button id="next">▶ Next Step</button> <label style="display:inline-block;margin-left:8px"><input type="checkbox" id="stepm"> Step-by-step mode (Produce/Consume wait for Next Step)</label>
+ <label>Producer interval: <input type="range" id="pr" min="0.5" max="5" step="0.5" value="2"> <b id="prv">2</b>s</label>
+ <label>Consumer interval: <input type="range" id="cr" min="0.5" max="5" step="0.5" value="3"> <b id="crv">3</b>s</label></div>
+<h2 style="margin-left:4px">Synchronization / Semaphore Status</h2>
+<div class="row"><div class="card sem"><h2>empty</h2><div class="v" id="ve"></div><small>Number of empty parking slots</small></div>
+<div class="card sem"><h2>full</h2><div class="v" id="vf"></div><small>Number of cars currently in parking</small></div>
+<div class="card sem"><h2>mutex</h2><div class="v" id="vm"></div><small>Controls mutual exclusion</small><div id="mxo"></div></div></div>
+<div class="two"><div class="card"><h2>Event Log</h2><div id="log"></div></div>
+<div class="card"><h2>Statistics</h2><div id="stats"></div><h2 style="margin-top:14px">Formulas</h2>
+<div><code>empty = Capacity − Cars in Buffer</code><br><br><code>full = Cars in Buffer</code><br><br><code>mutex = 1 free / 0 locked</code><br><br><b id="inv"></b></div></div></div>
+<div class="card"><h2>How Producer–Consumer Works</h2>
+<p><b>Producer:</b> The Car Factory produces cars and places them into the shared parking buffer.</p>
+<p><b>Buffer:</b> The Parking Area is a limited shared resource where produced cars wait before being consumed.</p>
+<p><b>Consumer:</b> The Customer/Dealer removes cars from the parking buffer.</p>
+<p><b>Semaphore:</b> Semaphores control the number of empty and occupied parking slots and prevent simultaneous unsafe access.</p>
+<p><code>Producer: wait(empty) → wait(mutex) → add car → signal(mutex) → signal(full)</code><br><br>
+<code>Consumer: wait(full) → wait(mutex) → remove car → signal(mutex) → signal(empty)</code></p></div>
+</div>
+<script>
+const $=i=>document.getElementById(i),sleep=ms=>new Promise(r=>setTimeout(r,ms));
+let S,gen=0,busy=null,gate=null,autoP=false,autoC=false,running=false,pTimer,cTimer,note='';
+function init(){gen++;if(gate){gate();gate=null}
+ const cap=Math.min(10,Math.max(1,parseInt($('cap').value)||3));$('cap').value=cap;
+ S={cap,buf:Array(cap).fill(null),inI:0,outI:0,empty:cap,full:0,mutex:1,owner:null,prod:0,cons:0,nextId:1,pW:false,cW:true,pWc:0,cWc:0,log:[]};
+ busy=null;note='Ready. Press Produce Car, Consume Car, or Start Simulation.';stopAuto();$('log').innerHTML='';render()}
+function log(m){const d=document.createElement('div');d.textContent='['+new Date().toLocaleTimeString([],{hour12:false})+'] '+m;$('log').prepend(d);while($('log').children.length>50)$('log').lastChild.remove()}
+function render(){
+ $('slots').innerHTML=S.buf.map((c,i)=>c?`<div class="slot on"><span class="e">🚗</span>Car ${c}<br>Slot ${i+1}</div>`:`<div class="slot"><span class="e" style="opacity:.25">🅿️</span>EMPTY<br>Slot ${i+1}</div>`).join('');
+ $('ve').textContent=S.empty;$('vf').textContent=S.full;$('vm').textContent=S.mutex;
+ $('mx').innerHTML=S.mutex?'🟢 <b>Critical Section Available</b>':'🔴 <b>Critical Section Locked</b>';
+ $('mxo').innerHTML='Mutex Owner: <b>'+(S.owner||'None')+'</b>';
+ const ps=busy=='Producer'?'Producing':S.pW?(S.empty==0?'Waiting':'Ready'):'Ready',cs=busy=='Consumer'?'Consuming':S.cW?(S.full==0?'Waiting':'Ready'):'Ready';
+ $('ps').textContent=ps;$('ps').className='st '+ps;$('cs').textContent=cs;$('cs').className='st '+cs;
+ const inCar=S.buf.filter(x=>x).length,fl=busy?1:0;
+ $('bp').disabled=S.empty==0||!!busy;$('bc').disabled=S.full==0||!!busy;
+ $('pw').textContent=S.empty==0?'Produce disabled: Parking Full':'';$('cw').textContent=S.full==0?'Consume disabled: Parking Empty':'';
+ $('ba').textContent=autoP?'Auto Produce: ON':'Auto Produce';$('bd').textContent=autoC?'Auto Consume: ON':'Auto Consume';
+ $('stats').innerHTML=[['Total Cars Produced',S.prod],['Total Cars Consumed',S.cons],['Cars Currently in Buffer',inCar],['Producer Wait Count',S.pWc],['Consumer Wait Count',S.cWc]].map(x=>`<div class="stat"><span>${x[0]}</span><b>${x[1]}</b></div>`).join('');
+ const sum=S.empty+S.full;$('inv').innerHTML=`empty + full = ${S.empty} + ${S.full} = ${sum} ${busy?'(1 slot in transit during operation)':sum==S.cap?'= Capacity ✔':'✖'}`;
+ $('msg').textContent=note;$('next').disabled=!($('stepm').checked&&(gate||!busy))&&!!busy}
+function set(k,v,name){const o=S[k];S[k]=v;log(`${name} = ${o} → ${v}`)}
+function fly(from,to,emoji){return new Promise(res=>{const st=$('stage').getBoundingClientRect(),a=from.getBoundingClientRect(),b=to.getBoundingClientRect(),e=document.createElement('div');
+ e.className='fly';e.textContent=emoji;e.style.left=(a.left-st.left+a.width/2-14)+'px';e.style.top=(a.top-st.top+a.height/2-14)+'px';$('stage').appendChild(e);
+ requestAnimationFrame(()=>requestAnimationFrame(()=>{e.style.left=(b.left-st.left+b.width/2-14)+'px';e.style.top=(b.top-st.top+b.height/2-14)+'px'}));
+ setTimeout(()=>{e.remove();res()},750)})}
+const slotEl=i=>$('slots').children[i];
+async function wait_(g){if($('stepm').checked){note+=' — press ▶ Next Step';render();await new Promise(r=>gate=r);gate=null}else await sleep(380);return g==gen}
+const P=[
+ ()=>{note='Producer executes wait(empty)';log('Producer requested empty slot');set('empty',S.empty-1,'empty')},
+ ()=>{note='Producer executes wait(mutex) — enters critical section';log('Producer acquired mutex');S.owner='Producer';set('mutex',0,'mutex')},
+ async()=>{const id=S.nextId++,i=S.inI;note=`Car ${id} is produced and moves to the parking`;log(`Car ${id} produced`);render();
+  const g=gen;await fly($('fac'),slotEl(i),'🚗');if(g!=gen)return;S.buf[i]=id;S.inI=(i+1)%S.cap;S.prod++;log(`Car ${id} added to Parking Slot ${i+1}`);S.lastP=id},
+ ()=>{note='Producer executes signal(mutex)';log('Producer released mutex — Mutex Released');S.owner=null;set('mutex',1,'mutex')},
+ ()=>{set('full',S.full+1,'full');note=`Car ${S.lastP} successfully added to parking.`}];
+const C=[
+ ()=>{note='Consumer executes wait(full)';log('Consumer requested full slot');set('full',S.full-1,'full')},
+ ()=>{note='Consumer executes wait(mutex) — enters critical section';log('Consumer acquired mutex');S.owner='Consumer';set('mutex',0,'mutex')},
+ async()=>{const i=S.outI,id=S.buf[i];note=`Car ${id} leaves the parking and goes to the customer`;const el=slotEl(i);S.buf[i]=null;S.outI=(i+1)%S.cap;S.cons++;S.lastC=id;
+  const ghost=el.cloneNode(true);render();log(`Car ${id} removed from Slot ${i+1}`);const g=gen;await fly(slotEl(i),$('cus'),'🚗');if(g!=gen)return;log(`Car ${id} consumed`)},
+ ()=>{note='Consumer executes signal(mutex)';log('Consumer released mutex — Mutex Released');S.owner=null;set('mutex',1,'mutex')},
+ ()=>{set('empty',S.empty+1,'empty');note=`Car ${S.lastC} successfully consumed by the customer.`}];
+async function run(who){
+ const g=gen;while(busy&&g==gen)await sleep(60);if(g!=gen)return;
+ if(who=='Producer'&&S.empty==0){if(!S.pW)S.pW=true;S.pWc++;note='Producer is WAITING — Parking is Full. Parking is full. Producer must wait until the Consumer removes a car.';log('Producer WAITING — buffer full');render();return}
+ if(who=='Consumer'&&S.full==0){S.cW=true;S.cWc++;note='Consumer is WAITING — Parking is Empty. Parking is empty. Consumer is waiting for the Producer.';log('Consumer WAITING — buffer empty');render();return}
+ if(who=='Producer')S.pW=false;else S.cW=false;
+ busy=who;const steps=who=='Producer'?P:C;
+ for(let i=0;i<steps.length;i++){await steps[i]();if(g!=gen)return;render();if(i<steps.length-1&&!await wait_(g))return}
+ busy=null;if(who=='Producer')S.cW&&0;render()}
+function tickP(){if(!running||!autoP)return;run('Producer');pTimer=setTimeout(tickP,$('pr').value*1000)}
+function tickC(){if(!running||!autoC)return;run('Consumer');cTimer=setTimeout(tickC,$('cr').value*1000)}
+function stopAuto(){running=false;autoP=autoC=false;clearTimeout(pTimer);clearTimeout(cTimer)}
+$('bp').onclick=()=>run('Producer');$('bc').onclick=()=>run('Consumer');
+$('ba').onclick=()=>{autoP=!autoP;if(autoP){running=true;clearTimeout(pTimer);tickP()}render()};
+$('bd').onclick=()=>{autoC=!autoC;if(autoC){running=true;clearTimeout(cTimer);tickC()}render()};
+$('start').onclick=()=>{stopAuto();running=autoP=autoC=true;tickP();cTimer=setTimeout(tickC,500);render()};
+$('pause').onclick=()=>{stopAuto();note='Simulation paused.';render()};
+$('reset').onclick=init;$('cap').onchange=init;
+$('next').onclick=()=>{if(gate){gate()}else if(!busy){$('stepm').checked=true;run(S.empty>0?'Producer':'Consumer')}};
+$('pr').oninput=()=>$('prv').textContent=$('pr').value;$('cr').oninput=()=>$('crv').textContent=$('cr').value;
+init();
+</script></body></html>
