@@ -1,0 +1,692 @@
+<!doctype html><html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Print Queue — Producer–Consumer Simulator</title><style>
+:root {
+  --bg: #0b0e14;
+  --panel: #121924;
+  --panel-alt: #0f151f;
+  --border: #232d3d;
+  --text: #e8ecf1;
+  --text-dim: #8b97a8;
+  --text-faint: #5b6879;
+
+  --producer: #4c8dff;
+  --producer-soft: rgba(76, 141, 255, 0.12);
+  --buffer: #f2b84b;
+  --buffer-soft: rgba(242, 184, 75, 0.12);
+  --consumer: #34c77b;
+  --consumer-soft: rgba(52, 199, 123, 0.12);
+  --waiting: #ff5d5d;
+  --waiting-soft: rgba(255, 93, 93, 0.14);
+
+  --radius: 10px;
+  --font-ui: "Inter", -apple-system, BlinkMacSystemFont, sans-serif;
+  --font-mono: "JetBrains Mono", "SFMono-Regular", Menlo, monospace;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  background: var(--bg);
+  background-image:
+    radial-gradient(circle at 15% 0%, rgba(76, 141, 255, 0.06), transparent 45%),
+    radial-gradient(circle at 85% 20%, rgba(52, 199, 123, 0.05), transparent 40%);
+  color: var(--text);
+  font-family: var(--font-ui);
+  -webkit-font-smoothing: antialiased;
+}
+
+#root {
+  max-width: 1240px;
+  margin: 0 auto;
+  padding: 28px 20px 64px;
+}
+
+button {
+  font-family: var(--font-ui);
+  cursor: pointer;
+  border: none;
+}
+
+button:disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
+}
+
+/* ---------- Header ---------- */
+
+.app-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 24px;
+  padding-bottom: 22px;
+  margin-bottom: 24px;
+  border-bottom: 1px solid var(--border);
+  flex-wrap: wrap;
+}
+
+.app-header__title {
+  font-size: 26px;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  margin: 0 0 6px;
+}
+
+.app-header__title span {
+  color: var(--buffer);
+}
+
+.app-header__subtitle {
+  color: var(--text-dim);
+  font-size: 14.5px;
+  margin: 0;
+  max-width: 520px;
+  line-height: 1.5;
+}
+
+.sync-vars {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.sync-vars__item {
+  font-family: var(--font-mono);
+  font-size: 12.5px;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 8px 12px;
+  min-width: 130px;
+}
+
+.sync-vars__item b {
+  color: var(--text);
+  display: block;
+  font-size: 15px;
+}
+
+.sync-vars__item span {
+  color: var(--text-faint);
+}
+
+.sync-vars__item.empty b { color: var(--consumer); }
+.sync-vars__item.full b { color: var(--buffer); }
+.sync-vars__item.mutex b { color: var(--producer); }
+
+/* ---------- Controls bar ---------- */
+
+.controls-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+  flex-wrap: wrap;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 14px 18px;
+  margin-bottom: 24px;
+}
+
+.controls-bar__buttons {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.btn {
+  padding: 9px 16px;
+  border-radius: 8px;
+  font-size: 13.5px;
+  font-weight: 600;
+  transition: transform 0.12s ease, filter 0.12s ease;
+}
+
+.btn:active:not(:disabled) {
+  transform: scale(0.97);
+}
+
+.btn-start {
+  background: var(--consumer);
+  color: #06170f;
+}
+
+.btn-pause {
+  background: var(--buffer);
+  color: #241a04;
+}
+
+.btn-reset {
+  background: transparent;
+  color: var(--text-dim);
+  border: 1px solid var(--border);
+}
+
+.btn-reset:hover:not(:disabled) {
+  color: var(--text);
+  border-color: var(--text-faint);
+}
+
+.speed-control {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.speed-control__label {
+  font-size: 12.5px;
+  color: var(--text-dim);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.speed-control__options {
+  display: flex;
+  background: var(--panel-alt);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 3px;
+  gap: 2px;
+}
+
+.speed-option {
+  background: transparent;
+  color: var(--text-dim);
+  padding: 6px 12px;
+  border-radius: 6px;
+  font-size: 12.5px;
+  font-weight: 600;
+}
+
+.speed-option.active {
+  background: var(--producer-soft);
+  color: var(--producer);
+}
+
+.run-status {
+  font-family: var(--font-mono);
+  font-size: 12.5px;
+  padding: 6px 12px;
+  border-radius: 20px;
+  border: 1px solid var(--border);
+  color: var(--text-dim);
+}
+
+.run-status.running {
+  color: var(--consumer);
+  border-color: rgba(52, 199, 123, 0.35);
+  background: var(--consumer-soft);
+}
+
+.run-status.paused {
+  color: var(--buffer);
+  border-color: rgba(242, 184, 75, 0.35);
+  background: var(--buffer-soft);
+}
+
+/* ---------- Main pipeline layout ---------- */
+
+.pipeline {
+  display: grid;
+  grid-template-columns: 1fr 1.3fr 1fr;
+  gap: 18px;
+  align-items: start;
+  margin-bottom: 22px;
+}
+
+@media (max-width: 880px) {
+  .pipeline {
+    grid-template-columns: 1fr;
+  }
+}
+
+.panel {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 18px;
+}
+
+.panel__title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+  margin: 0 0 14px;
+}
+
+.panel__title .dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+}
+
+/* ---------- Producers ---------- */
+
+.producer-card {
+  background: var(--panel-alt);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 12px 14px;
+  margin-bottom: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  transition: border-color 0.2s ease;
+}
+
+.producer-card:last-child {
+  margin-bottom: 0;
+}
+
+.producer-card.active {
+  border-color: var(--producer);
+}
+
+.producer-card__name {
+  font-weight: 600;
+  font-size: 14px;
+}
+
+.producer-card__meta {
+  font-size: 11.5px;
+  color: var(--text-faint);
+  margin-top: 2px;
+}
+
+.producer-card__btn {
+  background: var(--producer-soft);
+  color: var(--producer);
+  padding: 7px 12px;
+  border-radius: 7px;
+  font-size: 12.5px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.producer-card__btn:hover:not(:disabled) {
+  filter: brightness(1.2);
+}
+
+.waiting-flag {
+  font-size: 11px;
+  font-family: var(--font-mono);
+  color: var(--waiting);
+  background: var(--waiting-soft);
+  padding: 3px 8px;
+  border-radius: 6px;
+  display: inline-block;
+  margin-top: 6px;
+  animation: flicker 1.4s ease-in-out infinite;
+}
+
+@keyframes flicker {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.55; }
+}
+
+/* ---------- Queue / buffer ---------- */
+
+.queue-count {
+  font-family: var(--font-mono);
+  font-size: 13px;
+  color: var(--text-dim);
+  margin-bottom: 10px;
+}
+
+.queue-count b {
+  color: var(--buffer);
+  font-size: 15px;
+}
+
+.queue-track {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.queue-slot {
+  aspect-ratio: 1 / 1.05;
+  border-radius: 8px;
+  border: 1.5px dashed var(--border);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  padding: 6px 4px;
+  font-family: var(--font-mono);
+}
+
+.queue-slot.empty span {
+  color: var(--text-faint);
+  font-size: 11px;
+}
+
+.queue-slot.filled {
+  border-style: solid;
+  border-color: var(--buffer);
+  background: var(--buffer-soft);
+  animation: pop-in 0.25s ease-out;
+}
+
+@keyframes pop-in {
+  from { transform: scale(0.85); opacity: 0; }
+  to { transform: scale(1); opacity: 1; }
+}
+
+.queue-slot__id {
+  font-weight: 700;
+  font-size: 12.5px;
+  color: var(--buffer);
+}
+
+.queue-slot__producer {
+  font-size: 10px;
+  color: var(--text-dim);
+  margin-top: 3px;
+}
+
+.progress-track {
+  height: 6px;
+  border-radius: 4px;
+  background: var(--panel-alt);
+  border: 1px solid var(--border);
+  overflow: hidden;
+}
+
+.progress-fill {
+  height: 100%;
+  background: linear-gradient(90deg, var(--producer), var(--buffer));
+  transition: width 0.3s ease;
+}
+
+.queue-flash {
+  margin-top: 10px;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  padding: 8px 10px;
+  border-radius: 7px;
+  background: var(--waiting-soft);
+  color: var(--waiting);
+  text-align: center;
+}
+
+/* ---------- Printer ---------- */
+
+.printer-visual {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  padding: 14px 8px 18px;
+}
+
+.printer-icon {
+  font-size: 40px;
+  margin-bottom: 10px;
+  transition: transform 0.2s ease;
+}
+
+.printer-icon.printing {
+  animation: chug 0.6s ease-in-out infinite;
+}
+
+@keyframes chug {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-3px); }
+}
+
+.printer-status-badge {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  font-weight: 600;
+  padding: 5px 12px;
+  border-radius: 20px;
+  margin-bottom: 12px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.printer-status-badge.ready {
+  color: var(--consumer);
+  background: var(--consumer-soft);
+}
+
+.printer-status-badge.printing {
+  color: var(--buffer);
+  background: var(--buffer-soft);
+}
+
+.printer-status-badge.waiting {
+  color: var(--waiting);
+  background: var(--waiting-soft);
+}
+
+.printer-current-job {
+  font-family: var(--font-mono);
+  font-size: 13px;
+  background: var(--panel-alt);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 10px 14px;
+  margin-bottom: 14px;
+  width: 100%;
+}
+
+.printer-current-job b {
+  color: var(--buffer);
+  display: block;
+  font-size: 14px;
+}
+
+.btn-print {
+  background: var(--consumer-soft);
+  color: var(--consumer);
+  padding: 10px 18px;
+  border-radius: 8px;
+  font-weight: 700;
+  font-size: 13.5px;
+  width: 100%;
+}
+
+.btn-print:hover:not(:disabled) {
+  filter: brightness(1.15);
+}
+
+/* ---------- Completed jobs ---------- */
+
+.section-panel {
+  margin-bottom: 20px;
+}
+
+.completed-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  max-height: 160px;
+  overflow-y: auto;
+}
+
+.completed-chip {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  background: var(--consumer-soft);
+  color: var(--consumer);
+  border: 1px solid rgba(52, 199, 123, 0.3);
+  border-radius: 20px;
+  padding: 6px 12px;
+}
+
+.completed-chip span {
+  color: var(--text-dim);
+}
+
+.empty-note {
+  color: var(--text-faint);
+  font-size: 13px;
+  font-style: italic;
+}
+
+/* ---------- Event log ---------- */
+
+.event-log {
+  max-height: 220px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.event-log__row {
+  font-family: var(--font-mono);
+  font-size: 12.5px;
+  color: var(--text-dim);
+  padding: 6px 10px;
+  border-radius: 6px;
+  background: var(--panel-alt);
+  border-left: 3px solid var(--border);
+}
+
+.event-log__row.type-produce { border-left-color: var(--producer); }
+.event-log__row.type-consume { border-left-color: var(--consumer); }
+.event-log__row.type-wait { border-left-color: var(--waiting); }
+
+.event-log__row time {
+  color: var(--text-faint);
+  margin-right: 8px;
+}
+
+/* ---------- Explanation ---------- */
+
+.explanation {
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--panel);
+  overflow: hidden;
+}
+
+.explanation__toggle {
+  width: 100%;
+  background: transparent;
+  color: var(--text);
+  padding: 16px 18px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 14.5px;
+  font-weight: 700;
+}
+
+.explanation__chevron {
+  transition: transform 0.2s ease;
+  color: var(--text-dim);
+}
+
+.explanation__chevron.open {
+  transform: rotate(180deg);
+}
+
+.explanation__body {
+  padding: 0 18px 20px;
+  color: var(--text-dim);
+  font-size: 14px;
+  line-height: 1.65;
+}
+
+.explanation__body h4 {
+  color: var(--text);
+  font-size: 14.5px;
+  margin: 16px 0 6px;
+}
+
+.explanation__body h4:first-child {
+  margin-top: 0;
+}
+
+.explanation__body code {
+  font-family: var(--font-mono);
+  background: var(--panel-alt);
+  border: 1px solid var(--border);
+  padding: 1px 6px;
+  border-radius: 4px;
+  color: var(--buffer);
+  font-size: 13px;
+}
+</style></head><body><div id="root">
+<header class="app-header"><div><h1 class="app-header__title">Print Queue <span>Producer–Consumer</span> Simulator</h1>
+<p class="app-header__subtitle">Students submit print jobs into a shared queue with room for 5 jobs. The printer pulls jobs out one by one. Watch how the two sides wait on each other when the queue fills up or runs dry.</p></div>
+<div class="sync-vars"><div class="sync-vars__item empty"><span>empty</span><b id="vE">5</b></div><div class="sync-vars__item full"><span>full</span><b id="vF">0</b></div><div class="sync-vars__item mutex"><span>mutex</span><b id="vM">free</b></div></div></header>
+<div class="controls-bar"><div class="controls-bar__buttons"><button class="btn btn-start" id="bStart">▶ Start Simulation</button><button class="btn btn-pause" id="bPause">⏸ Pause</button><button class="btn btn-reset" id="bReset">↺ Reset</button></div>
+<div class="speed-control"><span class="speed-control__label">Speed</span><div class="speed-control__options" id="speeds"><button class="speed-option" data-s="slow">Slow</button><button class="speed-option active" data-s="normal">Normal</button><button class="speed-option" data-s="fast">Fast</button></div></div><span class="run-status" id="rs">● Stopped</span></div>
+<div class="pipeline">
+<div class="panel"><h2 class="panel__title"><span class="dot" style="background:var(--producer)"></span>Producers</h2><div id="prods"></div></div>
+<div class="panel"><h2 class="panel__title"><span class="dot" style="background:var(--buffer)"></span>Print Queue (Shared Buffer)</h2><div class="queue-count" id="qc"></div><div class="queue-track" id="qt"></div><div class="progress-track"><div class="progress-fill" id="pf"></div></div><div class="queue-flash" id="qf" style="display:none">Queue Full — Producer is waiting.</div></div>
+<div class="panel"><h2 class="panel__title"><span class="dot" style="background:var(--consumer)"></span>Printer (Consumer)</h2><div class="printer-visual"><div class="printer-icon" id="pi">🖨️</div><span class="printer-status-badge ready" id="ps"></span><div class="printer-current-job" id="pj"></div><button class="btn-print" id="bPrint">Print Next Job</button><div class="queue-flash" id="qe" style="margin-top:12px;width:100%;display:none">Queue Empty — Consumer is waiting.</div></div></div>
+</div>
+<div class="panel section-panel"><h2 class="panel__title"><span class="dot" style="background:var(--consumer)"></span>Completed Jobs (<span id="cc">0</span>)</h2><div id="cl"></div></div>
+<div class="panel section-panel"><h2 class="panel__title"><span class="dot" style="background:var(--text-dim)"></span>Event Log</h2><div id="lg"></div></div>
+<div class="explanation" style="margin-top:20px"><button class="explanation__toggle" id="xt">How Producer–Consumer Works<span class="explanation__chevron" id="xc">▾</span></button><div class="explanation__body" id="xb" style="display:none">
+<h4>1. What is a Producer?</h4><p>A producer creates work and hands it off without doing the work itself. Each student is a producer: "Generate Print Job" drops a job into the shared queue.</p>
+<h4>2. What is a Consumer?</h4><p>A consumer takes work out of the shared queue and processes it. The printer pulls the oldest job and prints it, one at a time.</p>
+<h4>3. What is the Buffer?</h4><p>The shared print queue between students and printer. It holds up to 5 jobs and absorbs the speed mismatch between producers and consumer.</p>
+<h4>4. Why does the producer wait when the buffer is full?</h4><p>A sixth job would overwrite or lose data. At <code>5 / 5</code>, producers must wait until the printer frees a slot.</p>
+<h4>5. Why does the consumer wait when the buffer is empty?</h4><p>The printer can't print a job that doesn't exist. At <code>0 / 5</code> it idles until a student submits something.</p>
+<h4>6. What is synchronization?</h4><p>Rules that stop producers and consumer from interfering when sharing the buffer — no two writing the same slot, and no reading an unfilled slot.</p>
+<h4>7. What are <code>empty</code>, <code>full</code>, <code>mutex</code>?</h4><p><code>empty</code> = free slots (starts at 5). <code>full</code> = filled slots (starts at 0). <code>mutex</code> = lock ensuring only one side changes the queue at a time. They're shown live in the header, but this simulation doesn't use real OS semaphores.</p>
+</div></div></div>
+<script>
+const CAP=5,NAMES=['Student 1','Student 2','Student 3'];
+const SR={slow:[3000,6000],normal:[1500,3200],fast:[600,1500]},PD={slow:1800,normal:1100,fast:600},RETRY=700;
+const $=id=>document.getElementById(id),rnd=(a,b)=>Math.floor(Math.random()*(b-a+1))+a;
+let queue,done,logs,prod,status,cur,running,paused,speed='normal',jc,pt={},ct=null,dt=null;
+function init(){queue=[];done=[];logs=[];prod=NAMES.map(n=>({n,c:0,a:false}));status='ready';cur=null;running=paused=false;jc=0;}
+init();
+const log=(m,t)=>{logs.unshift({time:new Date().toLocaleTimeString('en-GB',{hour12:false}),m,t});logs=logs.slice(0,100);render();};
+function flash(n){const p=prod.find(p=>p.n===n);p.a=true;setTimeout(()=>{p.a=false;render()},450);}
+function produce(n){if(queue.length>=CAP)return false;const j={id:'Job '+(++jc),p:n};queue.push(j);prod.find(p=>p.n===n).c++;flash(n);log(n+' produced '+j.id,'produce');return true;}
+function consume(){if(status==='printing')return false;if(!queue.length){status='waiting';render();return false;}
+const j=queue.shift();cur=j;status='printing';log('Printer started '+j.id,'consume');clearTimeout(dt);
+dt=setTimeout(()=>{done.push(j);cur=null;status=queue.length?'ready':'waiting';log('Printer completed '+j.id,'consume');if(running&&!paused)schedC();},PD[speed]);return true;}
+function schedP(n){const[a,b]=SR[speed];pt[n]=setTimeout(()=>{if(!running||paused)return;if(produce(n))schedP(n);else{log(n+' waiting — queue full','wait');pt[n]=setTimeout(()=>{if(running&&!paused)schedP(n)},RETRY);}},rnd(a,b));}
+function schedC(){const[a,b]=SR[speed];ct=setTimeout(()=>{if(!running||paused)return;if(!consume()){log('Printer waiting — queue empty','wait');ct=setTimeout(()=>{if(running&&!paused)schedC()},RETRY);}},rnd(a,b));}
+function clearAll(){Object.values(pt).forEach(clearTimeout);pt={};clearTimeout(ct);ct=null;}
+$('bStart').onclick=()=>{if(running&&!paused)return;running=true;paused=false;NAMES.forEach(n=>{if(!pt[n])schedP(n)});if(!ct&&status!=='printing')schedC();render();};
+$('bPause').onclick=()=>{if(!running||paused)return;paused=true;clearAll();render();};
+$('bReset').onclick=()=>{clearAll();clearTimeout(dt);init();render();};
+$('speeds').onclick=e=>{if(e.target.dataset.s){speed=e.target.dataset.s;render();}};
+$('bPrint').onclick=()=>{if(!consume()&&!queue.length)log('Printer waiting — queue empty','wait');};
+$('xt').onclick=()=>{const o=$('xb').style.display==='none';$('xb').style.display=o?'block':'none';$('xc').classList.toggle('open',o);};
+$('prods').onclick=e=>{const n=e.target.dataset.n;if(n&&!produce(n))log(n+' waiting — queue full','wait');};
+function render(){const full=queue.length>=CAP,empty=!queue.length;
+$('vE').textContent=CAP-queue.length;$('vF').textContent=queue.length;$('vM').textContent=status==='printing'?'locked':'free';
+$('bStart').textContent=paused?'▶ Resume':'▶ Start Simulation';$('bStart').disabled=running&&!paused;$('bPause').disabled=!running||paused;
+$('rs').textContent='● '+(running?(paused?'Paused':'Running'):'Stopped');$('rs').className='run-status '+(running?(paused?'paused':'running'):'');
+document.querySelectorAll('.speed-option').forEach(b=>b.classList.toggle('active',b.dataset.s===speed));
+$('prods').innerHTML=prod.map(p=>`<div class="producer-card ${p.a?'active':''}"><div><div class="producer-card__name">${p.n}</div><div class="producer-card__meta">${p.c} job(s) submitted</div>${full?'<div class="waiting-flag">Queue Full — waiting</div>':''}</div><button class="producer-card__btn" data-n="${p.n}" ${full?'disabled':''}>Generate Print Job</button></div>`).join('');
+$('qc').innerHTML=`<b>${queue.length}</b> / ${CAP} jobs ${full?'— FULL':''}`;
+$('qt').innerHTML=Array.from({length:CAP},(_,i)=>queue[i]?`<div class="queue-slot filled"><div class="queue-slot__id">${queue[i].id}</div><div class="queue-slot__producer">${queue[i].p}</div></div>`:'<div class="queue-slot empty"><span>Empty</span></div>').join('');
+$('pf').style.width=queue.length/CAP*100+'%';$('qf').style.display=full?'block':'none';
+$('pi').className='printer-icon '+(status==='printing'?'printing':'');
+$('ps').className='printer-status-badge '+status;$('ps').textContent={ready:'🟢 Ready',printing:'🟡 Printing',waiting:'🔴 Waiting'}[status];
+$('pj').innerHTML=cur?`<b>${cur.id}</b>printing for ${cur.p}…`:'<span style="color:var(--text-faint)">No job loaded</span>';
+$('bPrint').disabled=empty||status==='printing';$('qe').style.display=empty&&status!=='printing'?'block':'none';
+$('cc').textContent=done.length;$('cl').innerHTML=done.length?'<div class="completed-list">'+done.map(j=>`<span class="completed-chip">✓ ${j.id} <span>— ${j.p}</span></span>`).join('')+'</div>':'<p class="empty-note">No jobs printed yet.</p>';
+$('lg').innerHTML=logs.length?'<div class="event-log">'+logs.map(l=>`<div class="event-log__row type-${l.t}"><time>[${l.time}]</time>${l.m}</div>`).join('')+'</div>':'<p class="empty-note">No events yet — generate or print a job to begin.</p>';}
+render();
+</script></body></html>
